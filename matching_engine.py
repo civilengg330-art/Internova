@@ -88,7 +88,7 @@ def evaluate_match(internship_data: dict, student_data: dict) -> dict:
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-1.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=MATCHING_SYSTEM_INSTRUCTION,
