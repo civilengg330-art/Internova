@@ -140,28 +140,32 @@ def get_jobs_by_org(org_id):
 def get_all_jobs():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT 
-            jobs.id,
-            jobs.org_id,
-            jobs.title,
-            jobs.description,
-            jobs.positions,
-            jobs.duration,
-            jobs.location,
-            jobs.work_mode,
-            jobs.req_degree,
-            jobs.min_cgpa,
-            jobs.req_skills,
-            jobs.pref_skills,
-            organizations.org_name 
-        FROM jobs 
-        JOIN organizations ON jobs.org_id = organizations.id
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
-    
+    try:
+        cursor.execute("""
+            SELECT 
+                jobs.id,
+                jobs.org_id,
+                jobs.title,
+                jobs.description,
+                jobs.positions,
+                jobs.duration,
+                jobs.location,
+                jobs.work_mode,
+                jobs.req_degree,
+                jobs.min_cgpa,
+                jobs.req_skills,
+                jobs.pref_skills,
+                COALESCE(organizations.org_name, 'Unknown Organization') as org_name
+            FROM jobs 
+            LEFT JOIN organizations ON jobs.org_id = organizations.id
+        """)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        conn.close()
+
 def add_student(student_data):
     conn = get_connection()
     cursor = conn.cursor()
@@ -187,10 +191,14 @@ def add_student(student_data):
 def get_all_students():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM students")
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    try:
+        cursor.execute("SELECT * FROM students")
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        conn.close()
 
 def save_match_result(student_id, job_id, score, category, breakdown_json):
     conn = get_connection()
@@ -205,12 +213,16 @@ def save_match_result(student_id, job_id, score, category, breakdown_json):
 def get_match_results():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT match_results.*, students.name as student_name, jobs.title as job_title
-        FROM match_results
-        JOIN students ON match_results.student_id = students.id
-        JOIN jobs ON match_results.job_id = jobs.id
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    try:
+        cursor.execute("""
+            SELECT match_results.*, students.name as student_name, jobs.title as job_title
+            FROM match_results
+            LEFT JOIN students ON match_results.student_id = students.id
+            LEFT JOIN jobs ON match_results.job_id = jobs.id
+        """)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        conn.close()
