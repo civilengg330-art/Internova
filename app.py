@@ -1,9 +1,9 @@
 import streamlit as st
 import json
 from database import (
-    init_db, add_organization, verify_organization_login,
-    add_job, update_job, get_jobs_by_org, get_all_jobs, 
-    add_student, get_all_students, 
+    init_db, add_organization, verify_organization_login, get_all_organizations, delete_organization,
+    add_job, update_job, delete_job, get_jobs_by_org, get_all_jobs, 
+    add_student, get_all_students, delete_student,
     save_match_result, get_match_results
 )
 from matching_engine import evaluate_candidate
@@ -133,7 +133,6 @@ elif portal == "Organization Portal":
             st.write("---")
             job_mode = st.radio("Manage Internships", ["Add New Internship", "Edit Existing Internship"], horizontal=True)
             
-            # --- ADD NEW INTERNSHIP ---
             if job_mode == "Add New Internship":
                 st.subheader("Post a New Internship Opportunity")
                 with st.form("add_job_form"):
@@ -174,7 +173,6 @@ elif portal == "Organization Portal":
                             add_job(job_data)
                             st.success(f"Internship position '{title}' posted successfully!")
 
-            # --- EDIT EXISTING INTERNSHIP ---
             elif job_mode == "Edit Existing Internship":
                 st.subheader("Edit Existing Internship Opportunity")
                 org_jobs = get_jobs_by_org(logged_org["id"])
@@ -238,7 +236,7 @@ elif portal == "Coordinator Dashboard":
     else:
         st.success("Authorized Access")
         
-        tab1, tab2, tab3 = st.tabs(["🤖 AI Matcher", "🏢 Organizations & Listings", "🎓 Student Directory"])
+        tab1, tab2, tab3 = st.tabs(["🤖 AI Matcher", "🏢 Organizations & Job Postings", "🎓 Student Directory"])
         
         # --- TAB 1: AI Matcher ---
         with tab1:
@@ -291,7 +289,6 @@ elif portal == "Coordinator Dashboard":
                             
                             breakdown_data = res.get("breakdown", [])
                             
-                            # Structured table display
                             if isinstance(breakdown_data, list) and len(breakdown_data) > 0:
                                 table_rows = []
                                 for item in breakdown_data:
@@ -301,16 +298,6 @@ elif portal == "Coordinator Dashboard":
                                         "Reason / Remarks": item.get("deduction_reason", "N/A")
                                     })
                                 st.table(table_rows)
-                                
-                            elif isinstance(breakdown_data, dict):
-                                table_rows = []
-                                for k, v in breakdown_data.items():
-                                    table_rows.append({
-                                        "Evaluation Criteria": k.replace("_", " ").title(),
-                                        "Score Obtained": str(v),
-                                        "Reason / Remarks": "See overall AI explanation above."
-                                    })
-                                st.table(table_rows)
                             else:
                                 st.write("No breakdown available.")
                             
@@ -318,20 +305,51 @@ elif portal == "Coordinator Dashboard":
                                 save_match_result(res["student_id"], selected_job["id"], score, category, json.dumps(res["breakdown"]))
                                 st.success(f"Confirmed selection for {res['student_name']}!")
 
-        # --- TAB 2: Organizations & Listings ---
+        # --- TAB 2: Organizations & Job Postings ---
         with tab2:
-            st.subheader("Registered Organizations & Job Postings")
+            st.subheader("🏢 Manage Organizations & Job Postings")
+            
+            st.write("### Registered Organizations")
+            orgs = get_all_organizations()
+            if orgs:
+                st.dataframe(orgs, use_container_width=True)
+                
+                org_delete_map = {f"{o['org_name']} ({o['email']})": o['id'] for o in orgs}
+                del_org_label = st.selectbox("Select Organization to Delete", list(org_delete_map.keys()))
+                if st.button("🗑️ Delete Selected Organization"):
+                    delete_organization(org_delete_map[del_org_label])
+                    st.success("Organization and its posted jobs deleted successfully!")
+                    st.rerun()
+            else:
+                st.info("No registered organizations.")
+
+            st.write("---")
+            st.write("### Posted Internships")
             jobs = get_all_jobs()
             if jobs:
                 st.dataframe(jobs, use_container_width=True)
+                
+                job_delete_map = {f"{j['title']} at {j['org_name']} (ID: {j['id']})": j['id'] for j in jobs}
+                del_job_label = st.selectbox("Select Internship Listing to Delete", list(job_delete_map.keys()))
+                if st.button("🗑️ Delete Selected Internship Posting"):
+                    delete_job(job_delete_map[del_job_label])
+                    st.success("Internship posting deleted successfully!")
+                    st.rerun()
             else:
-                st.info("No organization job postings registered yet.")
+                st.info("No internship listings posted yet.")
 
         # --- TAB 3: Student Directory ---
         with tab3:
-            st.subheader("Registered Student Profiles")
+            st.subheader("🎓 Registered Student Profiles & Deletion")
             students = get_all_students()
             if students:
                 st.dataframe(students, use_container_width=True)
+                
+                student_delete_map = {f"{s['name']} - {s['email']} (ID: {s['id']})": s['id'] for s in students}
+                del_student_label = st.selectbox("Select Student Profile to Delete", list(student_delete_map.keys()))
+                if st.button("🗑️ Delete Selected Student Profile"):
+                    delete_student(student_delete_map[del_student_label])
+                    st.success("Student profile deleted successfully!")
+                    st.rerun()
             else:
                 st.info("No student profiles registered yet.")
