@@ -1,9 +1,18 @@
 import json
 import os
+import streamlit as st
 from google import genai
 from google.genai import types
 
-client = genai.Client()
+# Load GEMINI_API_KEY from Streamlit secrets or system environment variables
+api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key and "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
+
+if api_key:
+    client = genai.Client(api_key=api_key)
+else:
+    client = genai.Client()
 
 MATCHING_SYSTEM_INSTRUCTION = """
 You are an expert AI Internship Placement Matching Engine for Internova.
@@ -90,21 +99,20 @@ def evaluate_candidate(student_data, job_data):
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3.6-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=MATCHING_SYSTEM_INSTRUCTION,
-                temperature=0.2,
                 response_mime_type="application/json"
             )
         )
         return json.loads(response.text)
 
     except Exception as e:
-        print(f"Error calling Gemini API: {e}")
+        print(f"Error calling Gemini 3.6 API: {e}")
         return {
             "score": 0,
             "category": "No Match",
             "criterion_breakdown": [],
-            "explanation": "Failed to run AI evaluation due to an API error."
+            "explanation": f"Failed to run Gemini 3.6 AI evaluation: {str(e)}"
         }
