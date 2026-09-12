@@ -11,7 +11,6 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
     
-    # Create Organizations table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS organizations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,7 +22,6 @@ def init_db():
         )
     """)
     
-    # Create Jobs table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +40,6 @@ def init_db():
         )
     """)
     
-    # Create Students table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +57,6 @@ def init_db():
         )
     """)
     
-    # Create Match Results table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS match_results (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,6 +95,14 @@ def add_organization(org_data):
     finally:
         conn.close()
 
+def verify_organization_login(email, password):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM organizations WHERE email = ? AND password = ?", (email, password))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
 def get_organizations():
     conn = get_connection()
     cursor = conn.cursor()
@@ -125,6 +129,30 @@ def add_job(job_data):
         job_data["min_cgpa"],
         job_data["req_skills"],
         job_data["pref_skills"]
+    ))
+    conn.commit()
+    conn.close()
+
+def update_job(job_id, job_data):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE jobs 
+        SET title=?, description=?, positions=?, duration=?, location=?, work_mode=?, req_degree=?, min_cgpa=?, req_skills=?, pref_skills=?
+        WHERE id=? AND org_id=?
+    """, (
+        job_data["title"],
+        job_data["description"],
+        job_data["positions"],
+        job_data["duration"],
+        job_data["location"],
+        job_data["work_mode"],
+        job_data["req_degree"],
+        job_data["min_cgpa"],
+        job_data["req_skills"],
+        job_data["pref_skills"],
+        job_id,
+        job_data["org_id"]
     ))
     conn.commit()
     conn.close()
