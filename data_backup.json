@@ -1,0 +1,30 @@
+{
+    "organizations": [
+        {
+            "id": 1,
+            "org_name": "Tech Solutions Ltd",
+            "contact_person": "Ahmed Khan",
+            "email": "hr@techsolutions.com",
+            "phone": "+923001234567",
+            "password": "password123"
+        }
+    ],
+    "jobs": [
+        {
+            "id": 1,
+            "org_id": 1,
+            "title": "Software Engineering Intern",
+            "description": "Develop and test web apps using Python and SQL.",
+            "positions": 2,
+            "duration": "3 Months",
+            "location": "Islamabad",
+            "work_mode": "Hybrid",
+            "req_degree": "BS Computer Science",
+            "min_cgpa": 3.0,
+            "req_skills": "Python, SQL, Git",
+            "pref_skills": "Streamlit, PostgreSQL"
+        }
+    ],
+    "students": [],
+    "match_results": []
+}
