@@ -3,7 +3,6 @@ import os
 from google import genai
 from google.genai import types
 
-# Initialize client (uses GEMINI_API_KEY or GOOGLE_API_KEY from env/secrets)
 client = genai.Client()
 
 MATCHING_SYSTEM_INSTRUCTION = """
@@ -12,24 +11,49 @@ Your job is to strictly analyze candidate profiles against internship requiremen
 
 You MUST respond in valid JSON format only, matching this structure:
 {
-    "score": 85,
-    "category": "Strong Match",
-    "criterion_breakdown": {
-        "degree_fit": 20,
-        "cgpa_fit": 20,
-        "skills_fit": 25,
-        "experience_fit": 10,
-        "location_mode_fit": 10
-    },
-    "explanation": "Detailed professional reasoning behind the score."
+    "score": 57,
+    "category": "Potential Match",
+    "criterion_breakdown": [
+        {
+            "criterion": "Degree & Academic Fit",
+            "score_obtained": 20,
+            "max_score": 20,
+            "deduction_reason": "Perfect match in Civil Engineering degree program."
+        },
+        {
+            "criterion": "CGPA Threshold",
+            "score_obtained": 20,
+            "max_score": 20,
+            "deduction_reason": "Comfortably exceeds the minimum requirement with 3.0 CGPA."
+        },
+        {
+            "criterion": "Skill Alignment",
+            "score_obtained": 10,
+            "max_score": 30,
+            "deduction_reason": "Lacks required technical skills (Etabs, Revit), though possesses related software knowledge (SAP, AutoCAD)."
+        },
+        {
+            "criterion": "Projects & Experience",
+            "score_obtained": 0,
+            "max_score": 15,
+            "deduction_reason": "No relevant projects or certifications listed in profile."
+        },
+        {
+            "criterion": "Location & Work Mode",
+            "score_obtained": 7,
+            "max_score": 15,
+            "deduction_reason": "Conflict in work mode preferences (Candidate prefers On-site while position is Remote)."
+        }
+    ],
+    "explanation": "Detailed professional reasoning behind the overall score."
 }
 
-Rules for scoring (Total 100):
-1. Degree & Academic Fit (Max 20): Direct relevant major gets full marks.
-2. CGPA Threshold (Max 20): Meets or exceeds min CGPA requirement.
-3. Skill Alignment (Max 30): Match between required/preferred skills and student skills.
-4. Projects & Certifications (Max 15): Relevant project experience.
-5. Location & Work Mode (Max 15): Alignment with preferred location and work mode.
+Scoring Criteria Totals:
+1. Degree & Academic Fit (Max 20)
+2. CGPA Threshold (Max 20)
+3. Skill Alignment (Max 30)
+4. Projects & Experience (Max 15)
+5. Location & Work Mode (Max 15)
 
 Categories:
 - "Strong Match" (Score 80-100)
@@ -39,9 +63,6 @@ Categories:
 """
 
 def evaluate_candidate(student_data, job_data):
-    """
-    Evaluates a single student profile against a specific internship job posting using Gemini.
-    """
     prompt = f"""
     Please evaluate the following candidate for the given internship position.
 
@@ -69,7 +90,7 @@ def evaluate_candidate(student_data, job_data):
 
     try:
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=MATCHING_SYSTEM_INSTRUCTION,
@@ -84,6 +105,6 @@ def evaluate_candidate(student_data, job_data):
         return {
             "score": 0,
             "category": "No Match",
-            "criterion_breakdown": {"error": str(e)},
+            "criterion_breakdown": [],
             "explanation": "Failed to run AI evaluation due to an API error."
         }
