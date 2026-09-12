@@ -91,7 +91,29 @@ def add_organization(org_data):
         conn.commit()
         return True
     except sqlite3.IntegrityError:
+        # Returns False if email already exists
         return False
+    except sqlite3.OperationalError:
+        # Auto-repair table schema if old table structure exists
+        conn.close()
+        init_db()
+        conn = get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO organizations (org_name, contact_person, email, phone, password)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                org_data["org_name"],
+                org_data["contact_person"],
+                org_data["email"],
+                org_data["phone"],
+                org_data["password"]
+            ))
+            conn.commit()
+            return True
+        except Exception:
+            return False
     finally:
         conn.close()
 
