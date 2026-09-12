@@ -1,85 +1,66 @@
-import os
 import json
+import os
 from google import genai
 from google.genai import types
 
-# Set your Gemini API key here or via environment variable
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
-
-client = genai.Client(api_key=GEMINI_API_KEY)
+# Initialize client (uses GEMINI_API_KEY or GOOGLE_API_KEY from env/secrets)
+client = genai.Client()
 
 MATCHING_SYSTEM_INSTRUCTION = """
-You are the AI Matching Engine for INTERNOVA, an intelligent university internship recommendation system.
-Your job is to evaluate a Student Profile against an Internship Posting and calculate an accurate match score (0 to 100).
+You are an expert AI Internship Placement Matching Engine for Internova.
+Your job is to strictly analyze candidate profiles against internship requirements and evaluate match fitness.
 
-CRITICAL EVALUATION RULES:
-1. SEMANTIC MATCHING (Domain & Skills):
-   - Evaluate exact and relatable terms intelligently.
-   - Exact term/skill match = 100% credit for that item.
-   - Relatable/sister domain (e.g., "Project Engineering" vs "Project Management", or "ETABS" vs "RC Structural Design") = 80-90% credit.
-   - Unrelated domain (e.g., "Civil Engineering" vs "Microbiology") = 0% credit.
-
-2. STRICT LOCATION RULE:
-   - Location matching is STRICTLY confined within the same city.
-   - Same City & Same Sector/Neighborhood (e.g., Islamabad Sector G vs Sector G) = 100% location credit.
-   - Same City & Nearby Sector (e.g., Islamabad Sector G vs Sector F) = 80% location credit.
-   - Same City & Distant Sector (e.g., Islamabad Sector G vs Sector I) = 30% location credit.
-   - Different Cities OR Outside the City = STRICT 0% location credit (No Match for location).
-
-3. POINT BREAKDOWN (Total: 100 points):
-   - Academic Fit & CGPA: Max 20 points
-   - Technical Skills & Tools (Required & Preferred): Max 35 points
-   - Projects, Experience & Certifications: Max 25 points
-   - Areas of Interest: Max 10 points
-   - Location & Work Mode Fit: Max 10 points
-
-4. SCORE-TO-CATEGORY MAPPING:
-   - 95 - 100: Exact Match
-   - 80 - 94: Strong Match
-   - 65 - 79: Good Match
-   - 50 - 64: Related Match
-   - 20 - 49: Poor Match
-   - 0 - 19: No Match
-
-OUTPUT FORMAT:
-You MUST respond strictly in raw JSON without Markdown code blocks using this exact format:
+You MUST respond in valid JSON format only, matching this structure:
 {
-  "score": <number between 0 and 100>,
-  "category": "<Exact Match | Strong Match | Good Match | Related Match | Poor Match | No Match>",
-  "criterion_breakdown": {
-    "academic_fit": "<X>/20 - <brief note>",
-    "technical_skills": "<X>/35 - <brief note>",
-    "experience_projects": "<X>/25 - <brief note>",
-    "areas_of_interest": "<X>/10 - <brief note>",
-    "location_work_mode": "<X>/10 - <brief note>"
-  },
-  "explanation": "<2-3 sentences explaining the main reasons for the score, highlighting semantic matches and location evaluation>"
+    "score": 85,
+    "category": "Strong Match",
+    "criterion_breakdown": {
+        "degree_fit": 20,
+        "cgpa_fit": 20,
+        "skills_fit": 25,
+        "experience_fit": 10,
+        "location_mode_fit": 10
+    },
+    "explanation": "Detailed professional reasoning behind the score."
 }
+
+Rules for scoring (Total 100):
+1. Degree & Academic Fit (Max 20): Direct relevant major gets full marks.
+2. CGPA Threshold (Max 20): Meets or exceeds min CGPA requirement.
+3. Skill Alignment (Max 30): Match between required/preferred skills and student skills.
+4. Projects & Certifications (Max 15): Relevant project experience.
+5. Location & Work Mode (Max 15): Alignment with preferred location and work mode.
+
+Categories:
+- "Strong Match" (Score 80-100)
+- "Good Match" (Score 65-79)
+- "Potential Match" (Score 50-64)
+- "No Match" (Score < 50)
 """
 
-def evaluate_match(internship_data: dict, student_data: dict) -> dict:
+def evaluate_candidate(student_data, job_data):
+    """
+    Evaluates a single student profile against a specific internship job posting using Gemini.
+    """
     prompt = f"""
-    Evaluate the following student profile against the internship requirements.
+    Please evaluate the following candidate for the given internship position.
 
-    === INTERNSHIP DETAILS ===
-    Title: {internship_data.get('internship_title')}
-    Description: {internship_data.get('internship_desc')}
-    Location: {internship_data.get('internship_location')}
-    Work Mode: {internship_data.get('work_mode')}
-    Required Degree: {internship_data.get('req_degree')}
-    Min CGPA: {internship_data.get('min_cgpa')}
-    Required Skills: {internship_data.get('req_skills')}
-    Preferred Skills: {internship_data.get('pref_skills')}
-    Preferred Interest: {internship_data.get('pref_interest')}
-    Other Requirements: {internship_data.get('other_reqs')}
+    --- INTERNSHIP POSITION DETAILS ---
+    Title: {job_data.get('title')}
+    Description: {job_data.get('description')}
+    Required Degree Field: {job_data.get('req_degree')}
+    Min CGPA Requirement: {job_data.get('min_cgpa')}
+    Required Skills: {job_data.get('req_skills')}
+    Preferred Skills: {job_data.get('pref_skills')}
+    Location: {job_data.get('location')}
+    Work Mode: {job_data.get('work_mode')}
 
-    === STUDENT PROFILE ===
-    Name: {student_data.get('student_name')}
+    --- STUDENT CANDIDATE PROFILE ---
+    Name: {student_data.get('name')}
     Degree: {student_data.get('degree')}
-    Department: {student_data.get('department')}
     CGPA: {student_data.get('cgpa')}
-    Technical Skills: {student_data.get('tech_skills')}
-    Interests: {student_data.get('interests')}
+    Technical & Soft Skills: {student_data.get('skills')}
+    Career Interests: {student_data.get('interests')}
     Projects/Experience: {student_data.get('projects_exp')}
     Certifications: {student_data.get('certifications')}
     Preferred Location: {student_data.get('pref_location')}
@@ -88,7 +69,7 @@ def evaluate_match(internship_data: dict, student_data: dict) -> dict:
 
     try:
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=MATCHING_SYSTEM_INSTRUCTION,
@@ -97,6 +78,7 @@ def evaluate_match(internship_data: dict, student_data: dict) -> dict:
             )
         )
         return json.loads(response.text)
+
     except Exception as e:
         print(f"Error calling Gemini API: {e}")
         return {
