@@ -232,63 +232,35 @@ elif portal == "Organization Portal":
 elif portal == "Coordinator Dashboard":
     st.header("📊 University Coordinator Dashboard")
     
-    passcode = st.sidebar.text_input("Coordinator Passcode", type="password")
-    if passcode != "admin123":
-        st.warning("Please enter the correct passcode in the sidebar to access the dashboard. (Default passcode: admin123)")
-    else:
-        st.success("Authorized Access")
-        
-        tab1, tab2, tab3 = st.tabs(["🤖 AI Matcher", "🏢 Organizations & Listings", "🎓 Student Directory"])
-        
-        # --- TAB 1: AI Matcher ---
-        with tab1:
-            st.subheader("Run AI Matching Engine")
-            all_jobs = get_all_jobs()
-            all_students = get_all_students()
-            
-            if not all_jobs:
-                st.info("No internship positions posted yet.")
-            elif not all_students:
-                st.info("No student profiles registered yet.")
-            else:
-                job_map = {f"{j['title']} at {j['org_name']} (ID: {j['id']})": j for j in all_jobs}
-                selected_job_label = st.selectbox("Select Internship Position to Evaluate", list(job_map.keys()))
-                selected_job = job_map[selected_job_label]
-                
-                if st.button("🤖 Run AI Matching Engine"):
-                    with st.spinner("Evaluating candidates using Gemini AI..."):
-                        progress_bar = st.progress(0)
-                        results = []
-                        
-                        for idx, student in enumerate(all_students):
-                            eval_result = evaluate_candidate(student, selected_job)
-                            results.append({
-                                "student_id": student["id"],
-                                "student_name": student["name"],
-                                "degree": student["degree"],
-                                "score": eval_result.get("score", 0),
-                                "category": eval_result.get("category", "No Match"),
-                                "breakdown": eval_result.get("criterion_breakdown", {}),
-                                "explanation": eval_result.get("explanation", "No evaluation available.")
-                            })
-                            progress_bar.progress((idx + 1) / len(all_students))
-                            
-                        results.sort(key=lambda x: x["score"], reverse=True)
-                        st.session_state["match_results"] = results
-                        st.success("AI Matching Evaluation Complete!")
-                        
-                if "match_results" in st.session_state:
-                    st.write("---")
-                    st.subheader("📊 Candidate Leaderboard")
-                    
-                    for idx, res in enumerate(st.session_state["match_results"]):
-                        score = res["score"]
-                        category = res["category"]
-                        
-                        with st.expander(f"#{idx+1} {res['student_name']} ({res['degree']}) — Score: {score}/100 — [{category}]"):
+    with st.expander(f"#{idx+1} {res['student_name']} ({res['degree']}) — Score: {score}/100 — [{category}]"):
                             st.write(f"**AI Explanation:** {res['explanation']}")
                             st.write("**Criterion Breakdown:**")
-                            st.json(res["breakdown"])
+                            
+                            breakdown_data = res.get("breakdown", [])
+                            
+                            # Handle new list format for proper tabular display
+                            if isinstance(breakdown_data, list) and len(breakdown_data) > 0:
+                                table_rows = []
+                                for item in breakdown_data:
+                                    table_rows.append({
+                                        "Evaluation Criteria": item.get("criterion", "N/A"),
+                                        "Score Obtained": f"{item.get('score_obtained', 0)} / {item.get('max_score', 0)}",
+                                        "Reason / Remarks": item.get("deduction_reason", "N/A")
+                                    })
+                                st.table(table_rows)
+                                
+                            # Fallback for old dictionary format
+                            elif isinstance(breakdown_data, dict):
+                                table_rows = []
+                                for k, v in breakdown_data.items():
+                                    table_rows.append({
+                                        "Evaluation Criteria": k.replace("_", " ").title(),
+                                        "Score Obtained": str(v),
+                                        "Reason / Remarks": "See overall AI explanation above."
+                                    })
+                                st.table(table_rows)
+                            else:
+                                st.write("No breakdown available.")
                             
                             if st.button(f"📌 Confirm Selection for {res['student_name']}", key=f"select_{res['student_id']}"):
                                 save_match_result(res["student_id"], selected_job["id"], score, category, json.dumps(res["breakdown"]))
