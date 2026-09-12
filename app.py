@@ -1,8 +1,8 @@
 import streamlit as st
 import json
 from database import (
-    init_db, add_organization, get_organizations, 
-    add_job, get_jobs_by_org, get_all_jobs, 
+    init_db, add_organization, verify_organization_login,
+    add_job, update_job, get_jobs_by_org, get_all_jobs, 
     add_student, get_all_students, 
     save_match_result, get_match_results
 )
@@ -75,7 +75,7 @@ if portal == "Student Portal":
 elif portal == "Organization Portal":
     st.header("🏢 Organization & Internship Management")
     
-    org_action = st.radio("Select Action", ["Register Organization", "Post New Internship"], horizontal=True)
+    org_action = st.radio("Select Action", ["Register Organization", "Login Organization"], horizontal=True)
     
     if org_action == "Register Organization":
         st.subheader("Register Organization Account")
@@ -99,57 +99,132 @@ elif portal == "Organization Portal":
                         "password": password
                     }
                     if add_organization(org_data):
-                        st.success("Organization registered successfully!")
+                        st.success("Organization registered successfully! You can now switch to 'Login Organization'.")
                     else:
                         st.error("An account with this email already exists.")
                         
-    elif org_action == "Post New Internship":
-        st.subheader("Post an Internship Opportunity")
-        orgs = get_organizations()
-        if not orgs:
-            st.info("No organizations registered yet. Please register an organization first.")
-        else:
-            org_options = {org["org_name"]: org["id"] for org in orgs}
-            selected_org_name = st.selectbox("Select Organization", list(org_options.keys()))
-            selected_org_id = org_options[selected_org_name]
-            
-            with st.form("job_form"):
-                title = st.text_input("Internship Title *", placeholder="e.g. AI & Machine Learning Intern")
-                description = st.text_area("Role Description *", placeholder="Details about responsibilities and day-to-day tasks...")
+    elif org_action == "Login Organization":
+        st.subheader("Organization Login")
+        
+        if "logged_in_org" not in st.session_state:
+            st.session_state["logged_in_org"] = None
+
+        if st.session_state["logged_in_org"] is None:
+            with st.form("org_login_form"):
+                email = st.text_input("Official Email *")
+                password = st.text_input("Password *", type="password")
+                login_submitted = st.form_submit_button("Login")
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    positions = st.number_input("Number of Positions", min_value=1, value=1)
-                    duration = st.text_input("Duration", value="3 Months")
-                    req_degree = st.text_input("Required Degree Field", placeholder="BS Computer Science")
-                with col2:
-                    location = st.text_input("Job Location", placeholder="Islamabad, Sector H-12")
-                    work_mode = st.selectbox("Work Mode", ["On-site", "Hybrid", "Remote"])
-                    min_cgpa = st.number_input("Minimum CGPA Requirement", min_value=0.0, max_value=4.0, value=2.5, step=0.1)
-                    
-                req_skills = st.text_area("Required Skills (comma separated) *", placeholder="Python, PyTorch, SQL")
-                pref_skills = st.text_area("Preferred / Bonus Skills", placeholder="Docker, Git, Streamlit")
-                
-                job_submitted = st.form_submit_button("Post Internship")
-                if job_submitted:
-                    if not title or not description or not req_skills:
-                        st.error("Please fill in all required fields (*).")
+                if login_submitted:
+                    org = verify_organization_login(email, password)
+                    if org:
+                        st.session_state["logged_in_org"] = org
+                        st.success(f"Welcome back, {org['org_name']}!")
+                        st.rerun()
                     else:
-                        job_data = {
-                            "org_id": selected_org_id,
-                            "title": title,
-                            "description": description,
-                            "positions": positions,
-                            "duration": duration,
-                            "location": location,
-                            "work_mode": work_mode,
-                            "req_degree": req_degree,
-                            "min_cgpa": min_cgpa,
-                            "req_skills": req_skills,
-                            "pref_skills": pref_skills
-                        }
-                        add_job(job_data)
-                        st.success(f"Internship position '{title}' posted successfully!")
+                        st.error("Invalid email or password.")
+        else:
+            logged_org = st.session_state["logged_in_org"]
+            st.success(f"Logged in as **{logged_org['org_name']}** ({logged_org['email']})")
+            if st.button("Logout"):
+                st.session_state["logged_in_org"] = None
+                st.rerun()
+
+            st.write("---")
+            job_mode = st.radio("Manage Internships", ["Add New Internship", "Edit Existing Internship"], horizontal=True)
+            
+            # --- ADD NEW INTERNSHIP ---
+            if job_mode == "Add New Internship":
+                st.subheader("Post a New Internship Opportunity")
+                with st.form("add_job_form"):
+                    title = st.text_input("Internship Title *", placeholder="e.g. AI & Machine Learning Intern")
+                    description = st.text_area("Role Description *")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        positions = st.number_input("Number of Positions", min_value=1, value=1)
+                        duration = st.text_input("Duration", value="3 Months")
+                        req_degree = st.text_input("Required Degree Field", placeholder="BS Computer Science")
+                    with col2:
+                        location = st.text_input("Job Location", placeholder="Islamabad, Sector H-12")
+                        work_mode = st.selectbox("Work Mode", ["On-site", "Hybrid", "Remote"])
+                        min_cgpa = st.number_input("Minimum CGPA Requirement", min_value=0.0, max_value=4.0, value=2.5, step=0.1)
+                        
+                    req_skills = st.text_area("Required Skills (comma separated) *")
+                    pref_skills = st.text_area("Preferred / Bonus Skills")
+                    
+                    job_submitted = st.form_submit_button("Post Internship")
+                    if job_submitted:
+                        if not title or not description or not req_skills:
+                            st.error("Please fill in all required fields (*).")
+                        else:
+                            job_data = {
+                                "org_id": logged_org["id"],
+                                "title": title,
+                                "description": description,
+                                "positions": positions,
+                                "duration": duration,
+                                "location": location,
+                                "work_mode": work_mode,
+                                "req_degree": req_degree,
+                                "min_cgpa": min_cgpa,
+                                "req_skills": req_skills,
+                                "pref_skills": pref_skills
+                            }
+                            add_job(job_data)
+                            st.success(f"Internship position '{title}' posted successfully!")
+
+            # --- EDIT EXISTING INTERNSHIP ---
+            elif job_mode == "Edit Existing Internship":
+                st.subheader("Edit Existing Internship Opportunity")
+                org_jobs = get_jobs_by_org(logged_org["id"])
+                
+                if not org_jobs:
+                    st.info("You haven't posted any internships yet.")
+                else:
+                    job_map = {f"{j['title']} (ID: {j['id']})": j for j in org_jobs}
+                    selected_label = st.selectbox("Select Internship to Edit", list(job_map.keys()))
+                    selected_job = job_map[selected_label]
+                    
+                    with st.form("edit_job_form"):
+                        title = st.text_input("Internship Title *", value=selected_job["title"])
+                        description = st.text_area("Role Description *", value=selected_job["description"])
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            positions = st.number_input("Number of Positions", min_value=1, value=selected_job["positions"])
+                            duration = st.text_input("Duration", value=selected_job["duration"])
+                            req_degree = st.text_input("Required Degree Field", value=selected_job["req_degree"])
+                        with col2:
+                            location = st.text_input("Job Location", value=selected_job["location"])
+                            work_modes = ["On-site", "Hybrid", "Remote"]
+                            work_mode_idx = work_modes.index(selected_job["work_mode"]) if selected_job["work_mode"] in work_modes else 0
+                            work_mode = st.selectbox("Work Mode", work_modes, index=work_mode_idx)
+                            min_cgpa = st.number_input("Minimum CGPA Requirement", min_value=0.0, max_value=4.0, value=float(selected_job["min_cgpa"]), step=0.1)
+                            
+                        req_skills = st.text_area("Required Skills (comma separated) *", value=selected_job["req_skills"])
+                        pref_skills = st.text_area("Preferred / Bonus Skills", value=selected_job["pref_skills"])
+                        
+                        update_submitted = st.form_submit_button("Update Internship")
+                        if update_submitted:
+                            if not title or not description or not req_skills:
+                                st.error("Please fill in all required fields (*).")
+                            else:
+                                job_data = {
+                                    "org_id": logged_org["id"],
+                                    "title": title,
+                                    "description": description,
+                                    "positions": positions,
+                                    "duration": duration,
+                                    "location": location,
+                                    "work_mode": work_mode,
+                                    "req_degree": req_degree,
+                                    "min_cgpa": min_cgpa,
+                                    "req_skills": req_skills,
+                                    "pref_skills": pref_skills
+                                }
+                                update_job(selected_job["id"], job_data)
+                                st.success(f"Internship position '{title}' updated successfully!")
 
 # ==========================================
 # 3. COORDINATOR DASHBOARD
@@ -209,7 +284,6 @@ elif portal == "Coordinator Dashboard":
                     for idx, res in enumerate(st.session_state["match_results"]):
                         score = res["score"]
                         category = res["category"]
-                        badge_color = "green" if score >= 80 else "orange" if score >= 60 else "red"
                         
                         with st.expander(f"#{idx+1} {res['student_name']} ({res['degree']}) — Score: {score}/100 — [{category}]"):
                             st.write(f"**AI Explanation:** {res['explanation']}")
