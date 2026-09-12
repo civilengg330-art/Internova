@@ -141,14 +141,27 @@ def get_all_jobs():
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT jobs.*, organizations.org_name 
+        SELECT 
+            jobs.id,
+            jobs.org_id,
+            jobs.title,
+            jobs.description,
+            jobs.positions,
+            jobs.duration,
+            jobs.location,
+            jobs.work_mode,
+            jobs.req_degree,
+            jobs.min_cgpa,
+            jobs.req_skills,
+            jobs.pref_skills,
+            organizations.org_name 
         FROM jobs 
         JOIN organizations ON jobs.org_id = organizations.id
     """)
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
-
+    
 def add_student(student_data):
     conn = get_connection()
     cursor = conn.cursor()
