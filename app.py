@@ -1,292 +1,239 @@
 import streamlit as st
-import pandas as pd
 import json
-import sqlite3
-import database
-from matching_engine import evaluate_match
+from database import (
+    init_db, add_organization, get_organizations, 
+    add_job, get_jobs_by_org, get_all_jobs, 
+    add_student, get_all_students, 
+    save_match_result, get_match_results
+)
+from matching_engine import evaluate_candidate
 
-# Page Configuration
-st.set_page_config(page_title="Internova - AI Internship Matching", layout="wide")
+# Initialize database
+init_db()
 
-# Ensure database tables exist
-database.init_db()
+st.set_page_config(
+    page_title="Internova - Internship Matching Platform",
+    page_icon="🎓",
+    layout="wide"
+)
 
-def get_db():
-    return database.get_connection()
+st.title("🎓 Internova")
+st.caption("AI-Driven Smart Internship Matching & Selection Platform")
 
 # Sidebar Navigation
-st.sidebar.title("🚀 INTERNOVA")
+st.sidebar.title("Navigation")
 portal = st.sidebar.radio("Navigate to Portal", ["Student Portal", "Organization Portal", "Coordinator Dashboard"])
 
 # ==========================================
 # 1. STUDENT PORTAL
 # ==========================================
 if portal == "Student Portal":
-    st.title("👨‍🎓 Student Portal")
-    st.markdown("Submit or manage your profile for AI-based internship matching.")
+    st.header("🎓 Student Profile Registration")
+    st.write("Submit your profile details to be evaluated for internship positions.")
     
-    action = st.radio("Choose Action", ["New Profile Submission", "Lookup / Update Existing Profile"], horizontal=True)
-    
-    if action == "New Profile Submission":
-        st.subheader("Create Student Profile")
-        with st.form("new_student_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                name = st.text_input("Full Name *")
-                s_id = st.text_input("Student ID / Roll No *")
-                email = st.text_input("Email Address *")
-                phone = st.text_input("Phone Number")
-                university = st.text_input("University")
-                degree = st.text_input("Degree Program (e.g., BS Civil Engineering)")
-            with col2:
-                dept = st.text_input("Department")
-                semester = st.text_input("Current Semester")
-                cgpa = st.number_input("CGPA", min_value=0.0, max_value=4.0, value=3.0, step=0.01)
-                grad_year = st.number_input("Graduation Year", min_value=2024, max_value=2030, value=2025)
-                pref_loc = st.text_input("Preferred Location (City, Sector)")
-                pref_mode = st.selectbox("Preferred Work Mode", ["On-site", "Remote", "Hybrid"])
-
-            st.markdown("---")
-            tech_skills = st.text_area("Technical Skills (e.g., Python, ETABS, AutoCAD, Structural Analysis)")
-            interests = st.text_area("Areas of Interest")
-            projects = st.text_area("Projects & Experience")
-            certs = st.text_area("Certifications & Other Skills")
+    with st.form("student_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            name = st.text_input("Full Name *")
+            email = st.text_input("Email Address *")
+            phone = st.text_input("Phone Number")
+            degree = st.text_input("Degree Program (e.g. BS Computer Science) *")
+        with col2:
+            cgpa = st.number_input("Current CGPA *", min_value=0.0, max_value=4.0, value=3.0, step=0.01)
+            pref_location = st.text_input("Preferred Location (e.g. Islamabad)")
+            pref_work_mode = st.selectbox("Preferred Work Mode", ["On-site", "Hybrid", "Remote"])
             
-            submit = st.form_submit_button("Submit Profile")
-            
-            if submit:
-                if not name or not s_id or not email:
-                    st.error("Please fill in all required fields marked with *.")
-                else:
-                    conn = get_db()
-                    c = conn.cursor()
-                    try:
-                        c.execute('''
-                            INSERT INTO students (student_name, university, student_id, email, phone, degree, department, current_semester, cgpa, grad_year, tech_skills, interests, projects_exp, certifications, pref_location, pref_work_mode, can_edit)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-                        ''', (name, university, s_id, email, phone, degree, dept, semester, cgpa, grad_year, tech_skills, interests, projects, certs, pref_loc, pref_mode))
-                        conn.commit()
-                        st.success("Profile submitted successfully! Your profile is now locked for matching.")
-                    except sqlite3.IntegrityError:
-                        st.error("A student profile with this Student ID or Email already exists.")
-                    finally:
-                        conn.close()
-
-    elif action == "Lookup / Update Existing Profile":
-        st.subheader("Profile Lookup")
-        search_id = st.text_input("Enter Student ID or Email")
-        if st.button("Search Profile"):
-            conn = get_db()
-            student = conn.execute("SELECT * FROM students WHERE student_id = ? OR email = ?", (search_id, search_id)).fetchone()
-            conn.close()
-            if student:
-                st.session_state['active_student'] = dict(student)
+        skills = st.text_area("Technical & Soft Skills (comma separated) *", placeholder="Python, Machine Learning, Data Analysis, SQL")
+        projects_exp = st.text_area("Key Projects / Work Experience", placeholder="Developed a web scraper using Python; Completed 2-month web dev internship.")
+        certifications = st.text_area("Certifications & Achievements", placeholder="AWS Certified Cloud Practitioner, Coursera Machine Learning")
+        interests = st.text_area("Career Interests / Goals", placeholder="Passionate about AI research, cloud architecture, and automation.")
+        
+        submitted = st.form_submit_button("Submit Profile")
+        if submitted:
+            if not name or not email or not degree or not skills:
+                st.error("Please fill in all required fields (*).")
             else:
-                st.error("No student profile found with those credentials.")
-
-        if 'active_student' in st.session_state:
-            s = st.session_state['active_student']
-            st.markdown("---")
-            st.subheader(f"Profile: {s['student_name']}")
-            
-            if s['can_edit'] == 0:
-                st.warning("🔒 Your profile is currently **LOCKED** by the Coordinator. You can view your details below, but editing is disabled.")
-                st.write(f"**Degree:** {s['degree']} | **CGPA:** {s['cgpa']}")
-                st.write(f"**Technical Skills:** {s['tech_skills']}")
-                st.write(f"**Preferred Location:** {s['pref_location']}")
-            else:
-                st.success("🔓 Your profile is **UNLOCKED**. You can update your details below.")
-                with st.form("edit_student_form"):
-                    u_cgpa = st.number_input("CGPA", min_value=0.0, max_value=4.0, value=float(s['cgpa']), step=0.01)
-                    u_skills = st.text_area("Technical Skills", value=s['tech_skills'] or "")
-                    u_projects = st.text_area("Projects & Experience", value=s['projects_exp'] or "")
-                    u_loc = st.text_input("Preferred Location", value=s['pref_location'] or "")
-                    
-                    if st.form_submit_button("Update Profile"):
-                        conn = get_db()
-                        conn.execute("UPDATE students SET cgpa=?, tech_skills=?, projects_exp=?, pref_location=? WHERE id=?", 
-                                     (u_cgpa, u_skills, u_projects, u_loc, s['id']))
-                        conn.commit()
-                        conn.close()
-                        st.success("Profile updated successfully!")
+                student_data = {
+                    "name": name,
+                    "email": email,
+                    "phone": phone,
+                    "degree": degree,
+                    "cgpa": cgpa,
+                    "skills": skills,
+                    "projects_exp": projects_exp,
+                    "certifications": certifications,
+                    "interests": interests,
+                    "pref_location": pref_location,
+                    "pref_work_mode": pref_work_mode
+                }
+                add_student(student_data)
+                st.success(f"Profile for {name} registered successfully!")
 
 # ==========================================
 # 2. ORGANIZATION PORTAL
 # ==========================================
 elif portal == "Organization Portal":
-    st.title("🏢 Organization Portal")
+    st.header("🏢 Organization & Internship Management")
     
-    org_auth_mode = st.radio("Action", ["Login", "Register Organization"], horizontal=True)
+    org_action = st.radio("Select Action", ["Register Organization", "Post New Internship"], horizontal=True)
     
-    if org_auth_mode == "Register Organization":
-        st.subheader("Organization Account Registration")
-        with st.form("reg_org"):
-            org_name = st.text_input("Organization Name *")
+    if org_action == "Register Organization":
+        st.subheader("Register Organization Account")
+        with st.form("org_reg_form"):
+            org_name = st.text_input("Organization / Company Name *")
             contact_person = st.text_input("Contact Person Name *")
             email = st.text_input("Official Email *")
-            phone = st.text_input("Phone Number *")
-            pwd = st.text_input("Password *", type="password")
+            phone = st.text_input("Contact Phone")
+            password = st.text_input("Account Password *", type="password")
             
-            if st.form_submit_button("Register"):
-                if not org_name or not email or not pwd:
-                    st.error("Please fill in all required fields.")
+            reg_submitted = st.form_submit_button("Register Account")
+            if reg_submitted:
+                if not org_name or not email or not password:
+                    st.error("Please fill in required fields (*).")
                 else:
-                    conn = get_db()
-                    try:
-                        conn.execute("INSERT INTO org_accounts (org_name, contact_person, email, phone, password) VALUES (?, ?, ?, ?, ?)",
-                                     (org_name, contact_person, email, phone, pwd))
-                        conn.commit()
-                        st.success("Account registered successfully! Please log in.")
-                    except sqlite3.IntegrityError:
+                    org_data = {
+                        "org_name": org_name,
+                        "contact_person": contact_person,
+                        "email": email,
+                        "phone": phone,
+                        "password": password
+                    }
+                    if add_organization(org_data):
+                        st.success("Organization registered successfully!")
+                    else:
                         st.error("An account with this email already exists.")
-                    finally:
-                        conn.close()
-
-    elif org_auth_mode == "Login":
-        st.subheader("Organization Login")
-        l_email = st.text_input("Email")
-        l_pwd = st.text_input("Password", type="password")
-        
-        if st.button("Login"):
-            conn = get_db()
-            account = conn.execute("SELECT * FROM org_accounts WHERE email = ? AND password = ?", (l_email, l_pwd)).fetchone()
-            conn.close()
-            if account:
-                st.session_state['logged_org'] = dict(account)
-                st.success(f"Welcome back, {account['org_name']}!")
-            else:
-                st.error("Invalid email or password.")
-
-        if 'logged_org' in st.session_state:
-            org = st.session_state['logged_org']
-            st.markdown("---")
-            st.subheader(f"Post Internship Position — {org['org_name']}")
+                        
+    elif org_action == "Post New Internship":
+        st.subheader("Post an Internship Opportunity")
+        orgs = get_organizations()
+        if not orgs:
+            st.info("No organizations registered yet. Please register an organization first.")
+        else:
+            org_options = {org["org_name"]: org["id"] for org in orgs}
+            selected_org_name = st.selectbox("Select Organization", list(org_options.keys()))
+            selected_org_id = org_options[selected_org_name]
             
-            with st.form("post_internship_form"):
-                title = st.text_input("Internship Title * (e.g., Structural Engineer Intern)")
-                desc = st.text_area("Job Description")
-                col1, col2, col3 = st.columns(3)
+            with st.form("job_form"):
+                title = st.text_input("Internship Title *", placeholder="e.g. AI & Machine Learning Intern")
+                description = st.text_area("Role Description *", placeholder="Details about responsibilities and day-to-day tasks...")
+                
+                col1, col2 = st.columns(2)
                 with col1:
                     positions = st.number_input("Number of Positions", min_value=1, value=1)
-                    duration = st.text_input("Duration (e.g., 3 Months)")
+                    duration = st.text_input("Duration", value="3 Months")
+                    req_degree = st.text_input("Required Degree Field", placeholder="BS Computer Science")
                 with col2:
-                    location = st.text_input("Location (e.g., Islamabad, Sector G-10)")
-                    mode = st.selectbox("Work Mode", ["On-site", "Remote", "Hybrid"])
-                with col3:
-                    req_degree = st.text_input("Required Degree")
-                    min_cgpa = st.number_input("Minimum CGPA", min_value=0.0, max_value=4.0, value=2.5, step=0.1)
+                    location = st.text_input("Job Location", placeholder="Islamabad, Sector H-12")
+                    work_mode = st.selectbox("Work Mode", ["On-site", "Hybrid", "Remote"])
+                    min_cgpa = st.number_input("Minimum CGPA Requirement", min_value=0.0, max_value=4.0, value=2.5, step=0.1)
+                    
+                req_skills = st.text_area("Required Skills (comma separated) *", placeholder="Python, PyTorch, SQL")
+                pref_skills = st.text_area("Preferred / Bonus Skills", placeholder="Docker, Git, Streamlit")
                 
-                req_skills = st.text_area("Required Skills * (e.g., ETABS, AutoCAD)")
-                pref_skills = st.text_area("Preferred Skills")
-                
-                if st.form_submit_button("Post Internship"):
-                    if not title or not req_skills:
-                        st.error("Title and Required Skills are mandatory.")
+                job_submitted = st.form_submit_button("Post Internship")
+                if job_submitted:
+                    if not title or not description or not req_skills:
+                        st.error("Please fill in all required fields (*).")
                     else:
-                        conn = get_db()
-                        conn.execute('''
-                            INSERT INTO organizations (org_id, internship_title, internship_desc, num_positions, duration, internship_location, work_mode, req_degree, min_cgpa, req_skills, pref_skills)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ''', (org['id'], title, desc, positions, duration, location, mode, req_degree, min_cgpa, req_skills, pref_skills))
-                        conn.commit()
-                        conn.close()
-                        st.success("Internship opening posted successfully!")
+                        job_data = {
+                            "org_id": selected_org_id,
+                            "title": title,
+                            "description": description,
+                            "positions": positions,
+                            "duration": duration,
+                            "location": location,
+                            "work_mode": work_mode,
+                            "req_degree": req_degree,
+                            "min_cgpa": min_cgpa,
+                            "req_skills": req_skills,
+                            "pref_skills": pref_skills
+                        }
+                        add_job(job_data)
+                        st.success(f"Internship position '{title}' posted successfully!")
 
 # ==========================================
 # 3. COORDINATOR DASHBOARD
 # ==========================================
 elif portal == "Coordinator Dashboard":
-    st.title("👔 Coordinator Dashboard")
-    passcode = st.sidebar.text_input("Coordinator Passcode", type="password")
+    st.header("📊 University Coordinator Dashboard")
     
+    passcode = st.sidebar.text_input("Coordinator Passcode", type="password")
     if passcode != "admin123":
-        st.warning("Please enter the valid Coordinator Passcode in the sidebar to access the dashboard.")
+        st.warning("Please enter the correct passcode in the sidebar to access the dashboard. (Default passcode: admin123)")
     else:
-        tab1, tab2 = st.tabs(["📊 AI Candidate Matching", "🔓 Student Lock/Unlock Control"])
+        st.success("Authorized Access")
         
-        # TAB 1: AI MATCHING ENGINE & LEADERBOARD
+        tab1, tab2, tab3 = st.tabs(["🤖 AI Matcher", "🏢 Organizations & Listings", "🎓 Student Directory"])
+        
+        # --- TAB 1: AI Matcher ---
         with tab1:
-            st.subheader("Select Internship Position to Run AI Match")
-            conn = get_db()
-            postings = conn.execute("SELECT o.id, o.internship_title, o.internship_location, a.org_name FROM organizations o JOIN org_accounts a ON o.org_id = a.id").fetchall()
-            conn.close()
+            st.subheader("Run AI Matching Engine")
+            all_jobs = get_all_jobs()
+            all_students = get_all_students()
             
-            if not postings:
-                st.info("No internship postings found in the database.")
+            if not all_jobs:
+                st.info("No internship positions posted yet.")
+            elif not all_students:
+                st.info("No student profiles registered yet.")
             else:
-                posting_options = {f"{p['org_name']} — {p['internship_title']} ({p['internship_location']})": p['id'] for p in postings}
-                selected_label = st.selectbox("Choose Internship Posting", list(posting_options.keys()))
-                selected_post_id = posting_options[selected_label]
+                job_map = {f"{j['title']} at {j['org_name']} (ID: {j['id']})": j for j in all_jobs}
+                selected_job_label = st.selectbox("Select Internship Position to Evaluate", list(job_map.keys()))
+                selected_job = job_map[selected_job_label]
                 
                 if st.button("🤖 Run AI Matching Engine"):
-                    with st.spinner("AI Engine evaluating student candidates..."):
-                        conn = get_db()
-                        posting_data = dict(conn.execute("SELECT * FROM organizations WHERE id = ?", (selected_post_id,)).fetchone())
-                        all_students = [dict(s) for s in conn.execute("SELECT * FROM students").fetchall()]
-                        conn.close()
-                        
+                    with st.spinner("Evaluating candidates using Gemini AI..."):
+                        progress_bar = st.progress(0)
                         results = []
-                        for s in all_students:
-                            ai_eval = evaluate_match(posting_data, s)
-                            results.append({
-                                "student_id": s['id'],
-                                "name": s['student_name'],
-                                "degree": s['degree'],
-                                "cgpa": s['cgpa'],
-                                "score": ai_eval.get("score", 0),
-                                "category": ai_eval.get("category", "No Match"),
-                                "breakdown": ai_eval.get("criterion_breakdown", {}),
-                                "explanation": ai_eval.get("explanation", "")
-                            })
                         
-                        # Sort descending by score
-                        results.sort(key=lambda x: x['score'], reverse=True)
-                        st.session_state['match_results'] = results
-
-                if 'match_results' in st.session_state:
-                    st.markdown("---")
+                        for idx, student in enumerate(all_students):
+                            eval_result = evaluate_candidate(student, selected_job)
+                            results.append({
+                                "student_id": student["id"],
+                                "student_name": student["name"],
+                                "degree": student["degree"],
+                                "score": eval_result.get("score", 0),
+                                "category": eval_result.get("category", "No Match"),
+                                "breakdown": eval_result.get("criterion_breakdown", {}),
+                                "explanation": eval_result.get("explanation", "No evaluation available.")
+                            })
+                            progress_bar.progress((idx + 1) / len(all_students))
+                            
+                        results.sort(key=lambda x: x["score"], reverse=True)
+                        st.session_state["match_results"] = results
+                        st.success("AI Matching Evaluation Complete!")
+                        
+                if "match_results" in st.session_state:
+                    st.write("---")
                     st.subheader("📊 Candidate Leaderboard")
                     
-                    for idx, res in enumerate(st.session_state['match_results'], start=1):
-                        col1, col2, col3, col4 = st.columns([1, 4, 2, 2])
-                        col1.write(f"**#{idx}**")
-                        col2.write(f"**{res['name']}** ({res['degree']})")
-                        col3.write(f"Score: **{res['score']} / 100**")
-                        col4.write(f"Category: `{res['category']}`")
+                    for idx, res in enumerate(st.session_state["match_results"]):
+                        score = res["score"]
+                        category = res["category"]
+                        badge_color = "green" if score >= 80 else "orange" if score >= 60 else "red"
                         
-                        with st.expander(f"View Evaluation Details for {res['name']}"):
-                            st.write("**AI Explanation:**", res['explanation'])
+                        with st.expander(f"#{idx+1} {res['student_name']} ({res['degree']}) — Score: {score}/100 — [{category}]"):
+                            st.write(f"**AI Explanation:** {res['explanation']}")
                             st.write("**Criterion Breakdown:**")
-                            st.json(res['breakdown'])
+                            st.json(res["breakdown"])
                             
-                            if st.button(f"📌 Confirm Selection for {res['name']}", key=f"select_{res['student_id']}"):
-                                conn = get_db()
-                                conn.execute("INSERT INTO selections (internship_id, student_id, match_score, match_category) VALUES (?, ?, ?, ?)",
-                                             (selected_post_id, res['student_id'], res['score'], res['category']))
-                                conn.commit()
-                                conn.close()
-                                st.success(f"Selected {res['name']} for this internship position!")
+                            if st.button(f"📌 Confirm Selection for {res['student_name']}", key=f"select_{res['student_id']}"):
+                                save_match_result(res["student_id"], selected_job["id"], score, category, json.dumps(res["breakdown"]))
+                                st.success(f"Confirmed selection for {res['student_name']}!")
 
-        # TAB 2: LOCK / UNLOCK STUDENTS
+        # --- TAB 2: Organizations & Listings ---
         with tab2:
-            st.subheader("Manage Student Editing Permissions")
-            conn = get_db()
-            students = conn.execute("SELECT id, student_name, student_id, email, can_edit FROM students").fetchall()
-            conn.close()
-            
-            if students:
-                for s in students:
-                    col1, col2, col3 = st.columns([3, 2, 2])
-                    col1.write(f"**{s['student_name']}** ({s['student_id']})")
-                    col2.write("Status: " + ("🟢 Unlocked" if s['can_edit'] == 1 else "🔒 Locked"))
-                    
-                    btn_label = "Lock Profile" if s['can_edit'] == 1 else "Unlock Profile"
-                    new_val = 0 if s['can_edit'] == 1 else 1
-                    if col3.button(btn_label, key=f"perm_{s['id']}"):
-                        conn = get_db()
-                        conn.execute("UPDATE students SET can_edit = ? WHERE id = ?", (new_val, s['id']))
-                        conn.commit()
-                        conn.close()
-                        st.rerun()
+            st.subheader("Registered Organizations & Job Postings")
+            jobs = get_all_jobs()
+            if jobs:
+                st.dataframe(jobs, use_container_width=True)
             else:
-                st.info("No students registered in the database yet.")
+                st.info("No organization job postings registered yet.")
+
+        # --- TAB 3: Student Directory ---
+        with tab3:
+            st.subheader("Registered Student Profiles")
+            students = get_all_students()
+            if students:
+                st.dataframe(students, use_container_width=True)
+            else:
+                st.info("No student profiles registered yet.")
