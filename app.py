@@ -338,18 +338,69 @@ elif portal == "Coordinator Dashboard":
             else:
                 st.info("No internship listings posted yet.")
 
-        # --- TAB 3: Student Directory ---
+        # --- TAB 3: Student Directory & Editing ---
         with tab3:
-            st.subheader("🎓 Registered Student Profiles & Deletion")
+            st.subheader("🎓 Registered Student Directory")
             students = get_all_students()
             if students:
                 st.dataframe(students, use_container_width=True)
                 
-                student_delete_map = {f"{s['name']} - {s['email']} (ID: {s['id']})": s['id'] for s in students}
-                del_student_label = st.selectbox("Select Student Profile to Delete", list(student_delete_map.keys()))
-                if st.button("🗑️ Delete Selected Student Profile"):
-                    delete_student(student_delete_map[del_student_label])
-                    st.success("Student profile deleted successfully!")
-                    st.rerun()
+                st.write("---")
+                student_action = st.radio("Student Action", ["Edit Student Profile", "Delete Student Profile"], horizontal=True)
+                
+                student_map = {f"{s['name']} - {s['email']} (ID: {s['id']})": s for s in students}
+                selected_student_label = st.selectbox("Select Student Profile", list(student_map.keys()))
+                selected_student = student_map[selected_student_label]
+                
+                if student_action == "Edit Student Profile":
+                    st.write(f"### ✏️ Editing Profile for {selected_student['name']}")
+                    with st.form("edit_student_form"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            edit_name = st.text_input("Full Name *", value=selected_student['name'])
+                            edit_email = st.text_input("Email Address *", value=selected_student['email'])
+                            edit_phone = st.text_input("Phone Number", value=selected_student.get('phone', ''))
+                            edit_degree = st.text_input("Degree Program *", value=selected_student['degree'])
+                        with col2:
+                            edit_cgpa = st.number_input("Current CGPA *", min_value=0.0, max_value=4.0, value=float(selected_student['cgpa']), step=0.01)
+                            edit_pref_location = st.text_input("Preferred Location", value=selected_student.get('pref_location', ''))
+                            
+                            modes = ["On-site", "Hybrid", "Remote"]
+                            curr_mode = selected_student.get('pref_work_mode', 'On-site')
+                            mode_idx = modes.index(curr_mode) if curr_mode in modes else 0
+                            edit_pref_work_mode = st.selectbox("Preferred Work Mode", modes, index=mode_idx)
+                            
+                        edit_skills = st.text_area("Technical & Soft Skills *", value=selected_student['skills'])
+                        edit_projects_exp = st.text_area("Key Projects / Work Experience", value=selected_student.get('projects_exp', ''))
+                        edit_certifications = st.text_area("Certifications & Achievements", value=selected_student.get('certifications', ''))
+                        edit_interests = st.text_area("Career Interests / Goals", value=selected_student.get('interests', ''))
+                        
+                        update_student_submitted = st.form_submit_button("💾 Save Profile Updates")
+                        if update_student_submitted:
+                            if not edit_name or not edit_email or not edit_degree or not edit_skills:
+                                st.error("Please fill in all required fields (*).")
+                            else:
+                                updated_student_data = {
+                                    "name": edit_name,
+                                    "email": edit_email,
+                                    "phone": edit_phone,
+                                    "degree": edit_degree,
+                                    "cgpa": edit_cgpa,
+                                    "skills": edit_skills,
+                                    "projects_exp": edit_projects_exp,
+                                    "certifications": edit_certifications,
+                                    "interests": edit_interests,
+                                    "pref_location": edit_pref_location,
+                                    "pref_work_mode": edit_pref_work_mode
+                                }
+                                add_student(updated_student_data)
+                                st.success(f"Profile for {edit_name} updated successfully!")
+                                st.rerun()
+
+                elif student_action == "Delete Student Profile":
+                    if st.button("🗑️ Delete Selected Student Profile"):
+                        delete_student(selected_student['id'])
+                        st.success("Student profile deleted successfully!")
+                        st.rerun()
             else:
                 st.info("No student profiles registered yet.")
